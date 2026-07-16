@@ -10,12 +10,11 @@ import torch
 from flask import Flask, render_template, request, jsonify
 from flask_cors import CORS
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
-from peft import PeftModel  # <-- NEW: Required for loading adapter weights
+from peft import PeftModel
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("nllb-flask")
 
-# NEW: Define the original foundation model used during training
 BASE_MODEL_NAME = "facebook/nllb-200-distilled-600M" 
 MODEL_PATH = "en_ne_nllb_finetuned"
 SRC_LANG = "eng_Latn"
@@ -39,19 +38,19 @@ def load_model():
         _device = "cuda" if torch.cuda.is_available() else "cpu"
         logger.info(f"Loading model on device: {_device}")
         
-        # 1. Load Tokenizer
         _tokenizer = AutoTokenizer.from_pretrained(MODEL_PATH, src_lang=SRC_LANG, tgt_lang=TGT_LANG)
         
-        # 2. Load the Base Model first
         logger.info(f"Loading base model: {BASE_MODEL_NAME}")
         base_model = AutoModelForSeq2SeqLM.from_pretrained(BASE_MODEL_NAME)
         
-        # 3. Apply your fine-tuned PEFT adapter weights on top of the base model
         logger.info(f"Applying PEFT adapter from: {MODEL_PATH}")
         _model = PeftModel.from_pretrained(base_model, MODEL_PATH)
         
         _model.to(_device)
-        _model.config.forced_bos_token_id = _tokenizer.convert_tokens_to_ids(TGT_LANG)
+        
+        # FIX: Setting via generation_config instead of config directly
+        _model.generation_config.forced_bos_token_id = _tokenizer.convert_tokens_to_ids(TGT_LANG)
+        
         _model.eval()
         logger.info("Model loaded successfully.")
     except Exception as e:
@@ -83,23 +82,41 @@ def translate_route():
         return jsonify({"error": f"Model unavailable: {_load_error}"}), 503
 
     try:
-        inputs = _tokenizer(text, return_tensors="pt", truncation=True, max_length=max_length)
-        inputs = {k: v.to(_device) for k, v in inputs.items()}
-
         start = time.perf_counter()
+        
+        # --- START LINE-BY-LINE LOGIC ---
+        lines = text.split('\n')
+        translated_lines = []
+        
         with torch.no_grad():
-            generated = _model.generate(
-                **inputs,
-                forced_bos_token_id=_tokenizer.convert_tokens_to_ids(TGT_LANG),
-                max_new_tokens=max_length,
-                temperature=temperature,
-                num_beams=num_beams,
-                do_sample=True if temperature > 0.1 else False,
-                early_stopping=True,
-            )
-        elapsed_ms = (time.perf_counter() - start) * 1000
+            for line in lines:
+                if not line.strip():
+                    # Preserve empty lines
+                    translated_lines.append("")
+                    continue
+                    
+                # Process individual line
+                inputs = _tokenizer(line, return_tensors="pt", truncation=True, max_length=max_length)
+                inputs = {k: v.to(_device) for k, v in inputs.items()}
 
-        translation = _tokenizer.batch_decode(generated, skip_special_tokens=True)[0]
+                generated = _model.generate(
+                    **inputs,
+                    forced_bos_token_id=_tokenizer.convert_tokens_to_ids(TGT_LANG),
+                    max_new_tokens=max_length,
+                    temperature=temperature,
+                    num_beams=num_beams,
+                    do_sample=True if temperature > 0.1 else False,
+                    early_stopping=True,
+                )
+                
+                nepali_line = _tokenizer.batch_decode(generated, skip_special_tokens=True)[0]
+                translated_lines.append(nepali_line)
+                
+        # Stitch all translated lines back together
+        translation = "\n".join(translated_lines)
+        # --- END LINE-BY-LINE LOGIC ---
+        
+        elapsed_ms = (time.perf_counter() - start) * 1000
 
         return jsonify(
             {

@@ -1,64 +1,56 @@
 # 🇳🇵 English → Nepali Neural Machine Translator
 
-A complete, production-ready English-to-Nepali translation system powered by a fine-tuned **NLLB-200** model, shipped with four interchangeable frontends (Streamlit, Gradio, FastAPI, Flask).
+A complete, production-ready English-to-Nepali translation system powered by a **Parameter-Efficient Fine-Tuned (PEFT) NLLB-200** model, shipped with a decoupled Flask REST API and a lightweight, responsive HTML/JS frontend.
 
 ## 📋 Overview
 
-This project wraps a fine-tuned NLLB-200 (~600M parameter) checkpoint — trained on 200,000 English–Nepali sentence pairs — in multiple ready-to-run interfaces:
-
-| Interface | Purpose | Run Command |
-|---|---|---|
-| **Streamlit** (`app.py`) | Primary, full-featured UI | `streamlit run app.py` |
-| **Gradio** (`gradio_app.py`) | Lightweight alternative UI | `python gradio_app.py` |
-| **FastAPI** (`backend/app.py`) | REST API for integration | `uvicorn backend.app:app --reload` |
-| **Flask** (`flask_app.py`) | REST API + HTML frontend | `python flask_app.py` |
+This project utilizes Facebook's NLLB-200 (~600M parameter) foundational model, enhanced with custom **LoRA (Low-Rank Adaptation)** weights trained on English–Nepali sentence pairs. The inference engine is wrapped in a stateless REST API, ensuring strict separation between the machine learning backend and the client-side user interface.
 
 ### ✨ Features
 
-- Deep blue / saffron / crimson Nepali-inspired theme
-- Character & word counters, 128-token auto-truncation warning
-- Adjustable temperature, max length, and beam count
-- Translation history (last 20) with timestamps, stored per session
-- Translation statistics (count, average latency)
-- Dark/light mode toggle
-- Language swap button
-- Copy-to-clipboard
-- 8 built-in example sentences across everyday domains
-- Graceful error handling if the model fails to load
-- Structured logging throughout
+- **Decoupled Architecture:** Strict Model-View-Controller (MVC) separation using a Python/Flask API and a Vanilla JS client.
+- **Asynchronous Processing:** Non-blocking UI with loading states and dynamic DOM updates via the `fetch` API.
+- **Responsive UI:** Deep blue / saffron / crimson Nepali-inspired theme with CSS Grid for mobile-to-desktop scaling.
+- **Optimized Inference:** Utilizes `.safetensors` for secure, rapid weight loading and dynamic `cuda`/`cpu` hardware routing.
+- **Stateless API:** Safe for concurrent network requests in a production environment.
+- **Graceful Error Handling:** Structured logging and user-friendly error catching if the model fails to load or the network drops.
 
 ## 🗂️ Project Structure
 
-```
+```text
 EnglishNepali-Translator/
-├── app.py                     # Streamlit app (primary)
-├── gradio_app.py               # Gradio app
-├── backend/
-│   ├── __init__.py
-│   └── app.py                  # FastAPI REST API
-├── flask_app.py                # Flask backend
+│
+├── en_ne_nllb_finetuned/       # Custom trained LoRA weights & Tokenizer
+│   ├── adapter_config.json
+│   ├── adapter_model.safetensors
+│   ├── tokenizer_config.json
+│   ├── tokenizer.json
+│   ├── training_args.bin
+│   └── README.md
+│
 ├── templates/
-│   └── index.html              # Flask frontend
-├── en_ne_nllb_finetuned/        # Your fine-tuned model (bring your own)
-├── requirements.txt
-├── README.md
-├── .env
-└── test_app.py                  # Standalone test script
+│   └── index.html              # The Vanilla JS / UI frontend
+│
+├── .env                        # Environment variables
+├── .gitignore                  # Git ignore rules
+├── flask_app.py                # The main Flask REST API server
+├── requirements.txt            # Python dependencies
+└── README.md                   # Project documentation
 ```
 
 ## 🔧 Installation
 
-1. **Clone / place the project folder** and `cd` into it:
+1. **Clone or download the project folder** and navigate into it:
    ```bash
    cd EnglishNepali-Translator
    ```
 
-2. **Ensure your fine-tuned model** is present at `en_ne_nllb_finetuned/` (a standard Hugging Face `save_pretrained` checkpoint — `config.json`, `pytorch_model.bin`/`model.safetensors`, tokenizer files, etc.).
+2. **Ensure your trained LoRA weights** and tokenizer files are present in the `en_ne_nllb_finetuned/` directory.
 
 3. **Create a virtual environment** (recommended):
    ```bash
-   python -m venv venv
-   source venv/bin/activate      # Windows: venv\Scripts\activate
+   python -m venv .venv
+   source .venv/bin/activate      # Windows: .venv\Scripts\activate
    ```
 
 4. **Install dependencies**:
@@ -66,66 +58,35 @@ EnglishNepali-Translator/
    pip install -r requirements.txt
    ```
 
-## 🚀 Running Each Version
+## 🚀 Running the Application
 
-### Streamlit (primary UI)
-```bash
-streamlit run app.py
-```
-Opens at `http://localhost:8501`.
-
-### Gradio
-```bash
-python gradio_app.py
-```
-Opens at `http://localhost:7860`.
-
-### FastAPI
-```bash
-uvicorn backend.app:app --reload
-```
-Interactive docs at `http://localhost:8000/docs`.
-
-### Flask
+Start the Flask REST API and web server:
 ```bash
 python flask_app.py
 ```
-Opens at `http://localhost:5000`.
+*The application UI will be available at `http://localhost:5000`.*
 
-## 📡 API Documentation (FastAPI / Flask)
+## 📡 API Documentation
 
 ### `POST /translate`
 
 **Request body:**
 ```json
 {
-  "text": "I am going to Kathmandu tomorrow.",
-  "max_length": 128,
-  "temperature": 0.7,
-  "num_beams": 4
+  "text": "I am going to Kathmandu tomorrow."
 }
 ```
 
 **Response:**
 ```json
 {
-  "original_text": "I am going to Kathmandu tomorrow.",
-  "translation": "म भोलि काठमाडौं जाँदैछु",
-  "time_taken_ms": 182.4,
-  "input_token_count": 9,
-  "output_token_count": 11
+  "translation": "म भोलि काठमाडौं जाँदैछु"
 }
 ```
 
-### `GET /health`
-Returns model load status and active device.
-
-### `GET /info` (FastAPI only)
-Returns model architecture, parameter count, and language codes.
-
-### Example curl request
+### Example cURL request
 ```bash
-curl -X POST http://localhost:8000/translate \
+curl -X POST http://localhost:5000/translate \
   -H "Content-Type: application/json" \
   -d '{"text": "Namaste, welcome to Nepal."}'
 ```
@@ -133,57 +94,39 @@ curl -X POST http://localhost:8000/translate \
 ## 🧠 Model Information
 
 - **Base architecture:** NLLB-200 (No Language Left Behind)
-- **Parameters:** ~600M
-- **Fine-tuning data:** 200,000 English–Nepali sentence pairs
+- **Parameters:** ~600M (Base) + Custom LoRA delta weights
+- **Fine-tuning Strategy:** PEFT (Parameter-Efficient Fine-Tuning) to prevent catastrophic forgetting.
 - **Source language code:** `eng_Latn`
 - **Target language code:** `npi_Deva`
-- **Max sequence length:** 128 tokens (configurable up to 256/512 depending on interface)
+- **Weight Format:** `.safetensors`
 
 ## 🛠️ Troubleshooting
 
 | Problem | Likely Cause | Fix |
 |---|---|---|
-| `OSError: en_ne_nllb_finetuned does not appear to be...` | Model folder missing/misnamed | Confirm the folder exists at the project root and contains a valid HF checkpoint |
-| Very slow translation | Running on CPU | Use a CUDA-enabled GPU, or reduce `num_beams`/`max_length` |
-| `CUDA out of memory` | GPU VRAM exceeded | Lower `max_length`/`num_beams`, or force CPU by setting `CUDA_VISIBLE_DEVICES=""` |
-| Garbled or empty output | Wrong `forced_bos_token_id` | Verify tokenizer was loaded with `src_lang`/`tgt_lang` set correctly |
-| `flask_cors` import error | Dependency not installed | `pip install flask-cors` |
-| Streamlit shows blank sidebar stats | No translations run yet | This is expected until at least one translation completes |
+| `OSError: en_ne_nllb_finetuned does not appear to be...` | Adapter folder missing/misnamed | Confirm the folder exists at the project root and contains `adapter_model.safetensors`. |
+| Very slow translation | Running on CPU | Ensure PyTorch is compiled with CUDA and an NVIDIA GPU is available. |
+| UI freezes on "Translating..." | Backend disconnected | Check the terminal running `flask_app.py` for Python traceback errors. |
+| Garbled or empty output | Wrong language IDs | Verify the tokenizer is passing `src_lang="eng_Latn"` and target ID `npi_Deva`. |
 
 ## ☁️ Deployment Options
 
-### Streamlit Community Cloud
-1. Push this repo to GitHub (model files may need Git LFS if large).
-2. Go to [share.streamlit.io](https://share.streamlit.io), link your repo, set `app.py` as the entry point.
-3. Add `requirements.txt` — Streamlit Cloud installs it automatically.
-
-### Hugging Face Spaces
-1. Create a new Space (SDK: **Streamlit** or **Gradio**).
-2. Upload `app.py` (or `gradio_app.py`), `requirements.txt`, and your model folder — or reference a model repo on the Hub instead of a local folder.
-3. Spaces will build and launch automatically.
-
-### Docker (FastAPI example)
+### Docker
+To deploy this stateless API in a containerized environment:
 ```dockerfile
 FROM python:3.11-slim
 WORKDIR /app
 COPY . .
 RUN pip install --no-cache-dir -r requirements.txt
-EXPOSE 8000
-CMD ["uvicorn", "backend.app:app", "--host", "0.0.0.0", "--port", "8000"]
+EXPOSE 5000
+CMD ["python", "flask_app.py"]
 ```
 Build and run:
 ```bash
 docker build -t en-ne-translator .
-docker run -p 8000:8000 en-ne-translator
-```
-
-## 🧪 Testing
-
-Run the standalone test script to sanity-check the model outside any web framework:
-```bash
-python test_app.py
+docker run -p 5000:5000 en-ne-translator
 ```
 
 ---
-
-Made with ❤️ for the Nepali language community | नेपाली भाषाका लागि निर्मित 🇳🇵
+**Author:** Solan Gurung  
+**Program:** B.Tech Artificial Intelligence and Machine Learning

@@ -10,10 +10,13 @@ import torch
 from flask import Flask, render_template, request, jsonify
 from flask_cors import CORS
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+from peft import PeftModel  # <-- NEW: Required for loading adapter weights
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("nllb-flask")
 
+# NEW: Define the original foundation model used during training
+BASE_MODEL_NAME = "facebook/nllb-200-distilled-600M" 
 MODEL_PATH = "en_ne_nllb_finetuned"
 SRC_LANG = "eng_Latn"
 TGT_LANG = "npi_Deva"
@@ -35,8 +38,18 @@ def load_model():
     try:
         _device = "cuda" if torch.cuda.is_available() else "cpu"
         logger.info(f"Loading model on device: {_device}")
+        
+        # 1. Load Tokenizer
         _tokenizer = AutoTokenizer.from_pretrained(MODEL_PATH, src_lang=SRC_LANG, tgt_lang=TGT_LANG)
-        _model = AutoModelForSeq2SeqLM.from_pretrained(MODEL_PATH)
+        
+        # 2. Load the Base Model first
+        logger.info(f"Loading base model: {BASE_MODEL_NAME}")
+        base_model = AutoModelForSeq2SeqLM.from_pretrained(BASE_MODEL_NAME)
+        
+        # 3. Apply your fine-tuned PEFT adapter weights on top of the base model
+        logger.info(f"Applying PEFT adapter from: {MODEL_PATH}")
+        _model = PeftModel.from_pretrained(base_model, MODEL_PATH)
+        
         _model.to(_device)
         _model.config.forced_bos_token_id = _tokenizer.convert_tokens_to_ids(TGT_LANG)
         _model.eval()
